@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RAWMIX</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#e8edf0; --ink:#10202c; --mute:#5d6e7a; --line:#c3cdd4;
+  --blue:#005b99; --yellow:#fecb00; --on-blue:#fff;
+  --f:'Archivo','Helvetica Neue',Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0b1620; --ink:#e6edf1; --mute:#8497a4; --line:#223442; --blue:#4aa3e0; --on-blue:#04131d}
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.5;padding-bottom:96px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+a{color:inherit}
+
+header{display:flex;justify-content:space-between;align-items:baseline;padding:20px clamp(16px,4vw,48px);border-bottom:1px solid var(--line)}
+.logo{font-stretch:62%;font-weight:900;font-size:28px;letter-spacing:.01em;text-decoration:none}
+.logo i{font-style:normal;color:var(--blue)}
+header nav a{margin-left:20px;font-size:14px;color:var(--mute);text-decoration:none}
+header nav a:hover{color:var(--ink)}
+
+.hero{padding:clamp(28px,6vw,72px) clamp(16px,4vw,48px) 24px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:32px;align-items:end}
+.hero h1{font-stretch:62%;font-weight:900;font-size:clamp(56px,13vw,190px);line-height:.82;letter-spacing:-.01em}
+.hero h1 span{display:block;color:var(--blue)}
+.hero p{max-width:34ch;color:var(--mute);font-size:18px}
+.dial{height:34px;margin:0 clamp(16px,4vw,48px);border-bottom:2px solid var(--ink);position:relative;
+  background:repeating-linear-gradient(90deg,var(--ink) 0 1px,transparent 1px 12px) bottom/100% 10px no-repeat,
+             repeating-linear-gradient(90deg,var(--ink) 0 1px,transparent 1px 60px) bottom/100% 22px no-repeat}
+.needle{position:absolute;bottom:-2px;width:4px;height:34px;background:var(--yellow);transition:left .5s cubic-bezier(.6,0,.2,1);box-shadow:0 0 0 1px var(--ink)}
+
+main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;padding:0 clamp(16px,4vw,48px)}
+.stations{border-right:1px solid var(--line);padding-right:24px}
+.st{display:grid;grid-template-columns:1fr;align-items:center;width:100%;text-align:left;padding:16px 0;border-bottom:1px solid var(--line)}
+.st .nm{font-stretch:75%;font-weight:800;font-size:clamp(22px,3vw,34px);line-height:1.05}
+.st .ds{display:block;font-size:14px;color:var(--mute);font-weight:400;font-stretch:100%;margin-top:3px}
+.st:hover .nm{color:var(--blue)}
+.st[aria-current=true]{background:var(--blue);color:var(--on-blue);margin-right:-24px;padding-right:24px;padding-left:12px;margin-left:-12px}
+.st[aria-current=true] .ds{color:inherit;opacity:.85}
+.st[aria-current=true] .nm{color:inherit}
+
+.queue{padding-left:24px;position:sticky;top:0;align-self:start}
+.queue h2,.contact h2{font-stretch:75%;font-weight:800;font-size:22px;padding:16px 0 10px}
+.live{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--yellow);box-shadow:0 0 0 1px var(--ink);margin-right:8px}
+.playing .live{animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.2}}
+.tr{display:grid;grid-template-columns:28px 1fr auto;gap:10px;width:100%;text-align:left;padding:10px 0;border-bottom:1px solid var(--line);font-size:15px}
+.tr small{color:var(--mute)}
+.tr[aria-current=true]{font-weight:700;color:var(--blue)}
+.tr:hover{background:color-mix(in srgb,var(--blue) 8%,transparent)}
+.empty{padding:16px 0;color:var(--mute);max-width:46ch}
+.empty code,.contact code{background:var(--line);padding:1px 6px;font-size:13px}
+.list{max-height:56vh;overflow:auto}
+
+.contact{margin:56px clamp(16px,4vw,48px) 0;padding:clamp(24px,5vw,56px);background:var(--yellow);color:#10202c;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:24px;align-items:end}
+.contact h2{font-stretch:62%;font-weight:900;font-size:clamp(36px,6vw,84px);line-height:.9;padding:0}
+.contact p{margin-bottom:16px;font-size:18px;max-width:38ch}
+.btn{display:inline-block;background:#10202c;color:#fff;padding:14px 22px;font-weight:700;text-decoration:none}
+.btn:hover{background:var(--blue)}
+footer{padding:28px clamp(16px,4vw,48px);color:var(--mute);font-size:13px}
+
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--ink);color:var(--bg);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;padding:12px clamp(16px,4vw,48px);z-index:5}
+.bar .ctl{display:flex;gap:6px;align-items:center}
+.bar button{width:40px;height:40px;display:grid;place-items:center;border-radius:50%}
+.bar button:hover{background:rgba(255,255,255,.14)}
+.bar #pp{background:var(--yellow);color:#10202c;width:48px;height:48px}
+.bar svg{width:20px;height:20px;fill:currentColor}
+.meta{min-width:0}
+.meta b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta span{font-size:13px;opacity:.7}
+.prog{height:4px;background:rgba(255,255,255,.25);margin-top:6px;cursor:pointer;position:relative}
+.prog div{position:absolute;inset:0 auto 0 0;background:var(--yellow);width:0}
+.vol{display:flex;align-items:center;gap:8px}
+.vol input{width:90px;accent-color:var(--yellow)}
+
+@media (max-width:800px){
+  .hero,.main,main,.contact{grid-template-columns:1fr}
+  .stations{border-right:0;padding-right:0}
+  .st[aria-current=true]{margin-right:0;padding-right:12px}
+  .queue{padding-left:0;position:static}
+  .vol{display:none}
+  .bar{grid-template-columns:auto minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="#">RAW<i>MIX</i></a>
+  <nav><a href="#stations">Stations</a><a href="#contact">Start your station</a></nav>
+</header>
+
+<section class="hero">
+  <h1>RAWMIX<span>radio.</span></h1>
+  <p>Independent stations, always on. Pick a frequency and the music keeps rolling, track after track, on repeat.</p>
+</section>
+<div class="dial" aria-hidden="true"><div class="needle" id="needle"></div></div>
+
+<main id="stations">
+  <div class="stations" id="stlist" role="list"></div>
+  <div class="queue" id="queue">
+    <h2 id="qtitle"><span class="live"></span>On air</h2>
+    <div class="list" id="tracks"></div>
+  </div>
+</main>
+
+<section class="contact" id="contact">
+  <h2>Are you a music producer?</h2>
+  <div>
+    <p>Contact us and set up your own online station on RAWMIX.</p>
+    <a class="btn" id="mail" href="mailto:hello@example.com?subject=My%20station%20on%20RAWMIX">Get in touch</a>
+  </div>
+</section>
+
+<footer>
+  RAWMIX &middot; Add audio to <code>songs/</code>, <code>shows/</code> or <code>others/</code> and it joins the rotation.
+</footer>
+
+<div class="bar">
+  <div class="ctl">
+    <button id="prev" aria-label="Previous track"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM20 6v12L9.5 12z"/></svg></button>
+    <button id="pp" aria-label="Play"><svg viewBox="0 0 24 24" id="ico"><path d="M8 5v14l11-7z"/></svg></button>
+    <button id="next" aria-label="Next track"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l10.5 6L4 18z"/></svg></button>
+  </div>
+  <div class="meta">
+    <b id="title">Choose a station</b>
+    <span id="sub">RAWMIX</span>
+    <div class="prog" id="prog"><div id="fill"></div></div>
+  </div>
+  <label class="vol">Vol <input type="range" id="vol" min="0" max="1" step="0.01" value="0.9" aria-label="Volume"></label>
+</div>
+
+<audio id="au" preload="auto"></audio>
+
+<script>
+/* ============ CONFIG — edit this part ============ */
+const CONFIG = {
+  // Your GitHub details. Leave empty to auto-detect when hosted at USER.github.io/REPO
+  // (for a custom domain, fill these in).
+  github: { user: "", repo: "", branch: "main" },
+  contactEmail: "hello@example.com",
+  folders: { songs: "songs", shows: "shows", others: "others" },
+  audioExt: ["mp3","m4a","aac","ogg","oga","opus","wav","flac","weba"]
+};
+
+/* Every station reads from the same folders. "sources" = which folders,
+   "match" = only files whose name contains this text (optional),
+   "order" = shuffle | az | za | new  (shuffle is seeded so it is stable per day). */
+const STATIONS = [
+  { name:"Indiefferential Radio", desc:"Indie, left-field and everything between the genres.", sources:["songs"], order:"shuffle" },
+  { name:"RAWMIX Main",        desc:"The whole catalogue, shuffled.", sources:["songs","shows","others"], order:"shuffle" },
+  { name:"Kvällsprat",         desc:"Shows and podcasts, in the order they were made.", sources:["shows"], order:"az" },
+  { name:"Nattskift",          desc:"Late-night songs, played from Z to A.", sources:["songs"], order:"za" },
+  { name:"Loose Ends",         desc:"Odds, sods and one-offs.", sources:["others"], order:"shuffle" },
+  { name:"Talk & Tape",        desc:"Words, then music. Shows mixed with songs.", sources:["shows","songs"], order:"shuffle" },
+  { name:"Fresh Cut",          desc:"The newest uploads first.", sources:["songs","shows","others"], order:"new" },
+  { name:"Midnatt FM",         desc:"Slow songs for after twelve.", sources:["songs"], order:"shuffle", match:"slow" },
+  { name:"Morgonpasset",       desc:"Easy songs to start the day.", sources:["songs"], order:"az" },
+  { name:"Basement Tapes",     desc:"Demos, rehearsals and rough cuts.", sources:["songs","others"], order:"shuffle", match:"demo" },
+  { name:"Studio Floor",       desc:"Live sessions and takes from the room.", sources:["songs","shows"], order:"shuffle", match:"live" },
+  { name:"Remix Lab",          desc:"Edits, flips and reworks.", sources:["songs"], order:"shuffle", match:"remix" },
+  { name:"Fika Radio",         desc:"Gentle music and a long chat.", sources:["songs","shows"], order:"az" },
+  { name:"Vinylskiva",         desc:"Full albums, front to back.", sources:["songs"], order:"az", match:"album" },
+  { name:"Rundgång",           desc:"Feedback, noise and wild experiments.", sources:["others","songs"], order:"za" },
+  { name:"Pratbubbla",         desc:"Interviews and conversations.", sources:["shows"], order:"shuffle", match:"interview" },
+  { name:"Södra Sidan",        desc:"Songs from the south side of town.", sources:["songs"], order:"shuffle" },
+  { name:"Norrsken",           desc:"Cold, bright and wide open.", sources:["songs","others"], order:"shuffle" },
+  { name:"Last Call",          desc:"The final songs of the night.", sources:["songs"], order:"new" },
+  { name:"Studio B",           desc:"Guest producers take over the mic.", sources:["shows","others"], order:"shuffle" },
+  { name:"Okänd Avsändare",    desc:"Unknown sender. Anything can come next.", sources:["songs","shows","others"], order:"shuffle" },
+  { name:"Din Station?",       desc:"Producers: this slot can be yours.", sources:["songs","shows","others"], order:"shuffle" }
+];
+/* ================================================ */
+
+const $ = id => document.getElementById(id);
+const au = $("au");
+const extRe = new RegExp("\\.(" + CONFIG.audioExt.join("|") + ")$", "i");
+let library = [];            // {title, url, folder, name}
+let current = -1, queue = [], idx = 0, wantPlay = false;
+
+$("mail").href = `mailto:${CONFIG.contactEmail}?subject=My%20station%20on%20RAWMIX`;
+
+/* ---------- finding files ---------- */
+function repoInfo(){
+  let {user, repo, branch} = CONFIG.github;
+  if (!user && location.hostname.endsWith(".github.io")){
+    user = location.hostname.split(".")[0];
+    repo = location.pathname.split("/")[1] || (user + ".github.io");
+  }
+  return {user, repo, branch};
+}
+const pretty = f => decodeURIComponent(f).replace(extRe,"").replace(/[_]+/g," ").replace(/^\d+\s*[-.]\s*/,"").trim();
+
+async function listFolder(folder){
+  const {user, repo, branch} = repoInfo();
+  if (!user) return null;
+  const r = await fetch(`https://api.github.com/repos/${user}/${repo}/contents/${folder}?ref=${branch}`);
+  if (!r.ok) return [];
+  const j = await r.json();
+  return j.filter(x => x.type==="file" && extRe.test(x.name))
+          .map(x => ({ name:x.name, title:pretty(x.name), folder, url: `${folder}/${encodeURIComponent(x.name)}` }));
+}
+async function load(){
+  // 1) a playlist.json next to index.html wins (see README note below)
+  try{
+    const r = await fetch("playlist.json",{cache:"no-store"});
+    if (r.ok){
+      const j = await r.json();
+      for (const [folder, files] of Object.entries(j))
+        for (const f of files) if (extRe.test(f))
+          library.push({name:f, title:pretty(f), folder, url:`${folder}/${encodeURIComponent(f)}`});
+      if (library.length) return;
+    }
+  }catch(e){}
+  // 2) otherwise ask GitHub which files are in the folders
+  try{
+    const res = await Promise.all(Object.values(CONFIG.folders).map(listFolder));
+    res.forEach(a => a && library.push(...a));
+  }catch(e){}
+}
+
+/* ---------- stations ---------- */
+function seeded(seed){ let s=seed; return () => (s = Math.imul(s ^ s>>>15, 2246822507)+1013904223 >>> 0) / 4294967296; }
+function build(st){
+  const pool = library.filter(t => st.sources.includes(t.folder));
+  let list = pool.filter(t => !st.match || t.name.toLowerCase().includes(st.match));
+  if (!list.length) list = pool.slice();   // no tagged files yet: play the whole pool
+  const h = [...st.name].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0, 7);
+  const byName = (a,b) => a.name.localeCompare(b.name, undefined, {numeric:true});
+  if (st.order==="az") list.sort(byName);
+  else if (st.order==="za") list.sort((a,b)=>byName(b,a));
+  else if (st.order==="new") list.sort((a,b)=>byName(b,a)); // name your files 2025-… to control this
+  else {
+    const day = Math.floor(Date.now()/864e5), rnd = seeded(day + h);
+    list.sort(byName);
+    for (let i=list.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
+  }
+  if (list.length>1) { const k = h % list.length; list = list.slice(k).concat(list.slice(0,k)); }  // each station starts somewhere different
+  return list;
+}
+function drawStations(){
+  $("stlist").innerHTML = "";
+  STATIONS.forEach((st,i) => {
+    const b = document.createElement("button");
+    b.className = "st"; b.setAttribute("role","listitem");
+    b.innerHTML = `<span class="nm">${st.name}<span class="ds">${st.desc}</span></span>`;
+    b.onclick = () => tune(i, true);
+    $("stlist").appendChild(b);
+  });
+}
+function tune(i, play){
+  current = i; idx = 0; wantPlay = play;
+  const st = STATIONS[i];
+  queue = build(st);
+  [...$("stlist").children].forEach((b,k)=> b.setAttribute("aria-current", k===i));
+  $("needle").style.left = `calc(${(i+.5)/STATIONS.length*100}% - 2px)`;
+  $("qtitle").innerHTML = `<span class="live"></span>${st.name}`;
+  drawQueue();
+  if (!queue.length){
+    $("title").textContent = st.name; $("sub").textContent = "Nothing on air yet";
+    au.removeAttribute("src"); return;
+  }
+  load_(idx);
+}
+function drawQueue(){
+  const box = $("tracks");
+  if (!queue.length){
+    const {user} = repoInfo();
+    box.innerHTML = `<p class="empty">No audio found for this station. Upload files to ${STATIONS[current].sources.map(s=>`<code>${CONFIG.folders[s]}/</code>`).join(", ")}${user ? "" : ` and set your GitHub user and repo in <code>CONFIG</code>, or add a <code>playlist.json</code>`}.</p>`;
+    return;
+  }
+  box.innerHTML = "";
+  queue.forEach((t,k) => {
+    const b = document.createElement("button");
+    b.className = "tr"; b.setAttribute("aria-current", k===idx);
+    b.innerHTML = `<small>${k+1}</small><span>${t.title}</span><small>${t.folder}</small>`;
+    b.onclick = () => { idx=k; wantPlay=true; load_(k); };
+    box.appendChild(b);
+  });
+}
+function load_(k){
+  idx = k; const t = queue[k];
+  au.src = t.url;
+  $("title").textContent = t.title;
+  $("sub").textContent = STATIONS[current].name;
+  [...$("tracks").children].forEach((b,i)=> b.setAttribute("aria-current", i===k));
+  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title:t.title, artist:STATIONS[current].name, album:"RAWMIX"});
+  if (wantPlay) au.play().catch(()=>{});
+}
+const step = d => { if (!queue.length) return; wantPlay = true; load_((idx + d + queue.length) % queue.length); };
+
+/* ---------- controls ---------- */
+const PLAY = "M8 5v14l11-7z", PAUSE = "M6 5h4v14H6zM14 5h4v14h-4z";
+function toggle(){
+  if (current<0) return tune(0,true);
+  au.paused ? au.play().catch(()=>{}) : au.pause();
+}
+$("pp").onclick = toggle;
+$("next").onclick = () => step(1);
+$("prev").onclick = () => au.currentTime>4 ? (au.currentTime=0) : step(-1);
+au.onended = () => step(1);                       // loops the whole station forever
+au.onerror = () => { if (queue.length>1) setTimeout(()=>step(1), 800); };
+au.onplay = au.onpause = () => {
+  $("ico").innerHTML = `<path d="${au.paused?PLAY:PAUSE}"/>`;
+  $("pp").setAttribute("aria-label", au.paused?"Play":"Pause");
+  document.body.classList.toggle("playing", !au.paused);
+};
+au.ontimeupdate = () => { if (au.duration) $("fill").style.width = (au.currentTime/au.duration*100)+"%"; };
+$("prog").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); if (au.duration) au.currentTime = (e.clientX-r.left)/r.width*au.duration; };
+$("vol").oninput = e => au.volume = e.target.value;
+au.volume = .9;
+document.addEventListener("keydown", e => { if (e.code==="Space" && !/INPUT|BUTTON/.test(e.target.tagName)){ e.preventDefault(); toggle(); } });
+if ("mediaSession" in navigator){
+  navigator.mediaSession.setActionHandler("nexttrack", ()=>step(1));
+  navigator.mediaSession.setActionHandler("previoustrack", ()=>step(-1));
+}
+
+/* ---------- go ---------- */
+(async () => { await load(); drawStations(); tune(0,false); })();
+</script>
+</body>
+</html>
