@@ -104,8 +104,6 @@ footer{padding:28px clamp(16px,4vw,48px);color:var(--mute);font-size:13px}
 @keyframes eq{0%{height:8px}100%{height:90px}}
 .st:disabled{cursor:default;color:var(--mute)}
 .st:disabled:hover .nm{color:inherit}
-.ld::after{content:"";animation:dots 1.6s steps(4,end) infinite}
-@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
 </style>
 </head>
 <body>
@@ -246,15 +244,21 @@ async function load(){
 }
 
 /* ---------- the radio clock ----------
-   Everyone hears the same thing at the same moment. The station runs on the wall clock:
-   a random order is drawn for each cycle, and "now" decides which track is on and how far in. */
-const EPOCH = Date.UTC(2026,0,1);
+   One shared timetable for all stations, worked out from the wall clock, so every listener
+   hears the same thing at the same moment. Rules:
+   - each station draws its next song at random from its own pool
+   - a song never plays on two stations at once
+   - if nothing unique is free, the station shows "signal lost" until something frees up
+   - Indiefferential Radio is served first and always keeps a song free, so it never goes quiet */
+const WINDOW = 6 * 3600;                 // the timetable is rebuilt every 6 hours (seconds)
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 const hash = str => [...str].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0, 7);
 function seeded(seed){ let s=seed>>>0; return () => (s = Math.imul(s ^ s>>>15, 2246822507)+1013904223 >>> 0) / 4294967296; }
 
-const LIVE = STATIONS.find(s => s.live);
-let tracks = [], durs = new Map(), total = 0, ready = null, live = false, seekTo = 0;
+const LIVE_IDX = STATIONS.findIndex(s => s.live);
+let tracks = [], pools = [], durs = new Map(), sim = null;
+let ready = null, isReady = false;
+let listening = false, cur = LIVE_IDX, playing = null, seekTo = 0, retuneT = null;
 
 const readCache = u => { try{ return +localStorage.getItem("rm_dur:"+u) || 0 }catch(e){ return 0 } };
 const saveCache = (u,d) => { try{ localStorage.setItem("rm_dur:"+u, d) }catch(e){} };
@@ -268,97 +272,155 @@ function probe(u){
     a.src = u;
   });
 }
+function buildPools(){
+  pools = STATIONS.map(st => {
+    let p = tracks.filter(t => st.sources.includes(t.folder));
+    if (st.match){ const m = p.filter(t => t.name.toLowerCase().includes(st.match)); if (m.length) p = m; }
+    return p.length ? p : tracks;        // empty folder? fall back to the whole catalogue
+  });
+}
 function prepare(){
-  tracks = library.filter(t => LIVE.sources.includes(t.folder))
-                  .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
-  const q = tracks.slice();
+  const all = library.slice().sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  const q = all.slice();
   return Promise.all(Array.from({length:6}, async () => {
     while (q.length){
       const t = q.shift(); let d = readCache(t.url);
       if (!d){ d = await probe(t.url); if (d) saveCache(t.url, d); }
       if (d > 1) durs.set(t.url, d);
     }
-  })).then(() => { tracks = tracks.filter(t => durs.has(t.url)); retotal(); });
+  })).then(() => { tracks = all.filter(t => durs.has(t.url)); buildPools(); });
 }
-const retotal = () => total = tracks.reduce((s,t) => s + durs.get(t.url), 0);
 
-function onNow(){
-  const t = (Date.now() - EPOCH) / 1000;
-  const cycle = Math.floor(t / total);
-  let pos = t - cycle * total;
-  const order = tracks.slice(), rnd = seeded(cycle + hash(LIVE.name));
-  for (let i=order.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
-  for (const tr of order){ const d = durs.get(tr.url); if (pos < d) return {tr, offset:pos}; pos -= d; }
-  return {tr:order[0], offset:0};
+function makeSim(anchor){
+  const st = STATIONS.map(() => ({tr:null, start:0, end:0, last:null, wait:false}));
+  const rnd = seeded(hash("rawmix" + anchor));
+  let T = anchor;
+  function assign(){
+    const inUse = new Set(st.filter(s => s.tr).map(s => s.tr.url));
+    const others = st.map((_,i)=>i).filter(i => i !== LIVE_IDX);
+    for (let i=others.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [others[i],others[j]]=[others[j],others[i]]; }
+    for (const i of [LIVE_IDX, ...others]){
+      const s = st[i]; if (s.tr) continue;
+      // other stations must leave at least one free song so Indiefferential can always play
+      if (i !== LIVE_IDX && tracks.length - inUse.size < 2){ s.wait = true; continue; }
+      let c = pools[i].filter(t => !inUse.has(t.url) && t !== s.last);
+      if (!c.length && i === LIVE_IDX) c = pools[i].filter(t => !inUse.has(t.url));
+      if (!c.length){ s.wait = true; continue; }
+      const t = c[Math.floor(rnd()*c.length)];
+      s.tr = t; s.start = T; s.end = T + durs.get(t.url); s.wait = false; inUse.add(t.url);
+    }
+  }
+  assign();
+  return { anchor, st, advance(now){
+    for(;;){
+      let next = Infinity;
+      for (const s of st) if (s.tr && s.end < next) next = s.end;
+      if (next > now) break;
+      T = next;
+      for (const s of st) if (s.tr && s.end <= T){ s.last = s.tr; s.tr = null; }
+      assign();
+    }
+  }};
+}
+function getSim(){
+  const now = Date.now()/1000, anchor = Math.floor(now/WINDOW)*WINDOW;
+  if (!sim || sim.anchor !== anchor) sim = makeSim(anchor);
+  sim.advance(now);
+  return sim;
+}
+
+/* ---------- listening ---------- */
+const LOST = "Radio Loading… signal lost.";
+function setStatus(t){ $("status").textContent = t; $("sub").textContent = t; }
+function setUI(){
+  $("ico").innerHTML = `<path d="${listening ? "M6 5h4v14H6zM14 5h4v14h-4z" : "M8 5v14l11-7z"}"/>`;
+  $("pp").setAttribute("aria-label", listening ? "Stop listening" : "Play live");
+  document.body.classList.toggle("playing", listening && !!playing);
 }
 function tuneIn(){
-  const {tr, offset} = onNow();
-  live = true; seekTo = offset;
-  au.muted = offset > 1;                 // stay quiet until we've jumped to the live point
-  au.src = tr.url;
+  if (!isReady || !tracks.length) return;
+  clearTimeout(retuneT);
+  const s = getSim().st[cur], now = Date.now()/1000;
+  if (!s.tr){                                          // nothing unique to play: signal lost
+    playing = null; au.pause(); setStatus(LOST); setUI(); return;
+  }
+  const offset = now - s.start, remain = s.end - now;
+  if (remain < 1){                                     // song is about to end: wait for the next one
+    playing = null; retuneT = setTimeout(tuneIn, remain*1000 + 150); return;
+  }
+  playing = s.tr.url; seekTo = offset;
+  au.muted = offset > 1;                               // stay quiet until we've jumped to the live point
+  au.src = s.tr.url;
   au.play().catch(()=>{});
+  setStatus("Live now."); setUI();
 }
 au.onloadedmetadata = () => {
-  if (!live) return;
-  if (seekTo > 1) au.currentTime = Math.min(seekTo, au.duration - 1);
-  else au.muted = false;
+  if (!playing) return;
+  if (seekTo > 1) au.currentTime = Math.min(seekTo, au.duration - 1); else au.muted = false;
 };
 au.onseeked = () => { au.muted = false; };
-au.onended = () => { if (live) tuneIn(); };           // next song, chosen by the clock
+au.onended = () => { if (listening) tuneIn(); };
 au.onerror = () => {
-  if (!live) return;
-  const bad = tracks.find(t => au.src.endsWith(t.url) || decodeURIComponent(au.src).endsWith(decodeURIComponent(t.url)));
-  if (bad){ tracks = tracks.filter(t => t !== bad); durs.delete(bad.url); retotal(); }
-  tracks.length ? setTimeout(tuneIn, 500) : setStatus("Off air. Try again soon.");
+  if (!listening || !playing) return;
+  tracks = tracks.filter(t => t.url !== playing); durs.delete(playing); buildPools(); sim = null;
+  playing = null; setTimeout(tuneIn, 500);
 };
-au.onplay = au.onpause = () => {
-  const on = !au.paused && live;
-  $("ico").innerHTML = `<path d="${on ? "M6 5h4v14H6zM14 5h4v14h-4z" : "M8 5v14l11-7z"}"/>`;
-  $("pp").setAttribute("aria-label", on ? "Stop listening" : "Play live");
-  document.body.classList.toggle("playing", on);
-  if (live || au.paused) setStatus(on ? "Live now." : "Press play to rejoin the broadcast.");
-};
-function setStatus(t){ $("status").textContent = t; $("sub").textContent = t; }
 
-async function toggle(){
-  if (live && !au.paused){ live = false; au.pause(); return; }   // radio keeps going without you
-  if (!ready){ setStatus("Tuning in…"); au.src = SILENT; au.play().catch(()=>{}); ready = prepare(); }
-  else if (!total) setStatus("Tuning in…");
-  await ready;
-  if (!tracks.length){ setStatus("Nothing on air yet. Upload audio to songs/, shows/ or others/."); return; }
+async function start(i){
+  if (i != null) cur = i;
+  listening = true; syncStation(); setUI();
+  if (!isReady){ setStatus("Tuning in…"); au.src = SILENT; au.play().catch(()=>{}); await ready; }
+  if (!tracks.length){ listening = false; setUI(); setStatus("Nothing on air yet. Upload audio to songs/, shows/ or others/."); return; }
   tuneIn();
 }
+function stop(){ listening = false; playing = null; clearTimeout(retuneT); au.pause(); setUI(); setStatus("Press play to rejoin the broadcast."); }
+const toggle = () => listening ? stop() : start();
+
 $("pp").onclick = toggle;
 $("vol").oninput = e => au.volume = e.target.value;
 au.volume = .9;
 document.addEventListener("keydown", e => { if (e.code==="Space" && !/INPUT|BUTTON/.test(e.target.tagName)){ e.preventDefault(); toggle(); } });
-if ("mediaSession" in navigator){
-  navigator.mediaSession.metadata = new MediaMetadata({title:LIVE.name, artist:"RAWMIX", album:"Live"});
+if ("mediaSession" in navigator)
   ["nexttrack","previoustrack","seekto","seekforward","seekbackward"].forEach(a => { try{ navigator.mediaSession.setActionHandler(a, null) }catch(e){} });
-}
 
 /* ---------- stations list ---------- */
 function drawStations(){
   $("stlist").innerHTML = "";
-  STATIONS.forEach(st => {
+  STATIONS.forEach((st,i) => {
     const b = document.createElement("button");
     b.className = "st"; b.setAttribute("role","listitem");
-    if (st.live){
-      b.innerHTML = `<span class="nm">${st.name}<span class="ds">${st.desc}</span></span>`;
-      b.setAttribute("aria-current","true");
-      b.onclick = toggle;
-    } else {
-      b.disabled = true;
-      b.innerHTML = `<span class="nm">${st.name}<span class="ds ld">Radio Loading</span></span>`;
-    }
+    b.innerHTML = `<span class="nm">${st.name}<span class="ds" id="ds${i}">${st.desc}</span></span>`;
+    b.onclick = () => start(i);
     $("stlist").appendChild(b);
   });
-  $("needle").style.left = `calc(${(STATIONS.indexOf(LIVE)+.5)/STATIONS.length*100}% - 2px)`;
-  $("qdesc").textContent = LIVE.desc;
+}
+function syncStation(){
+  const st = STATIONS[cur];
+  [...$("stlist").children].forEach((b,k) => b.setAttribute("aria-current", k===cur));
+  $("needle").style.left = `calc(${(cur+.5)/STATIONS.length*100}% - 2px)`;
+  $("qtitle").innerHTML = `<span class="live"></span>${st.name}`;
+  $("qdesc").textContent = st.desc;
+  $("title").textContent = st.name;
+  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title:st.name, artist:"RAWMIX", album:"Live"});
+}
+function tick(){
+  if (!isReady || !tracks.length) return;
+  const sm = getSim();
+  STATIONS.forEach((st,i) => {
+    const el = $("ds"+i), lost = !sm.st[i].tr;
+    if (el.dataset.lost !== String(lost)){
+      el.dataset.lost = lost; el.textContent = lost ? "Radio Loading… signal lost" : st.desc; el.classList.toggle("ld", lost);
+    }
+  });
+  if (listening && !playing) tuneIn();                 // signal came back: start playing
 }
 
 /* ---------- go ---------- */
-(async () => { await load(); drawStations(); })();
+(async () => {
+  await load(); drawStations(); syncStation();
+  ready = prepare(); await ready; isReady = true;
+  tick(); setInterval(tick, 1000);
+})();
 </script>
 </body>
 </html>
