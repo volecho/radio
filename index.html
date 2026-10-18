@@ -352,7 +352,8 @@ function tuneIn(){
   au.muted = offset > 1;                               // stay quiet until we've jumped to the live point
   au.src = s.tr.url;
   au.play().catch(()=>{});
-  setStatus("Live now."); setUI();
+  setStatus(s.tr.title); setUI();
+  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title:s.tr.title, artist:STATIONS[cur].name, album:"RAWMIX"});
 }
 au.onloadedmetadata = () => {
   if (!playing) return;
@@ -407,9 +408,9 @@ function tick(){
   if (!isReady || !tracks.length) return;
   const sm = getSim();
   STATIONS.forEach((st,i) => {
-    const el = $("ds"+i), lost = !sm.st[i].tr;
-    if (el.dataset.lost !== String(lost)){
-      el.dataset.lost = lost; el.textContent = lost ? "Radio Loading… signal lost" : st.desc; el.classList.toggle("ld", lost);
+    const el = $("ds"+i), tr = sm.st[i].tr, key = tr ? tr.url : "lost";
+    if (el.dataset.k !== key){
+      el.dataset.k = key; el.textContent = tr ? tr.title : "Radio Loading… signal lost"; el.classList.toggle("ld", !tr);
     }
   });
   if (listening && !playing) tuneIn();                 // signal came back: start playing
