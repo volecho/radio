@@ -91,6 +91,21 @@ footer{padding:28px clamp(16px,4vw,48px);color:var(--mute);font-size:13px}
   .bar{grid-template-columns:auto minmax(0,1fr)}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.onair{padding:24px 0}
+.onair h2{font-stretch:62%;font-weight:900;font-size:clamp(36px,5vw,72px);line-height:.95;padding:0 0 12px}
+.onair p{color:var(--mute);max-width:36ch}
+#status{margin-top:18px;color:var(--ink);font-weight:600}
+.eq{display:flex;gap:6px;align-items:flex-end;height:90px;margin-bottom:18px}
+.eq i{flex:1;max-width:22px;height:8px;background:var(--blue)}
+.playing .eq i{animation:eq 1s ease-in-out infinite alternate}
+.eq i:nth-child(2){animation-delay:-.7s!important}.eq i:nth-child(3){animation-delay:-.3s!important}
+.eq i:nth-child(4){animation-delay:-.9s!important}.eq i:nth-child(5){animation-delay:-.5s!important}
+.eq i:nth-child(6){animation-delay:-.2s!important}.eq i:nth-child(7){animation-delay:-.8s!important}
+@keyframes eq{0%{height:8px}100%{height:90px}}
+.st:disabled{cursor:default;color:var(--mute)}
+.st:disabled:hover .nm{color:inherit}
+.ld::after{content:"";animation:dots 1.6s steps(4,end) infinite}
+@keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
 </style>
 </head>
 <body>
@@ -109,8 +124,12 @@ footer{padding:28px clamp(16px,4vw,48px);color:var(--mute);font-size:13px}
 <main id="stations">
   <div class="stations" id="stlist" role="list"></div>
   <div class="queue" id="queue">
-    <h2 id="qtitle"><span class="live"></span>On air</h2>
-    <div class="list" id="tracks"></div>
+    <div class="onair">
+      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <h2 id="qtitle"><span class="live"></span>Indiefferential Radio</h2>
+      <p id="qdesc"></p>
+      <p id="status" aria-live="polite">Press play to tune in.</p>
+    </div>
   </div>
 </main>
 
@@ -128,14 +147,11 @@ footer{padding:28px clamp(16px,4vw,48px);color:var(--mute);font-size:13px}
 
 <div class="bar">
   <div class="ctl">
-    <button id="prev" aria-label="Previous track"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zM20 6v12L9.5 12z"/></svg></button>
-    <button id="pp" aria-label="Play"><svg viewBox="0 0 24 24" id="ico"><path d="M8 5v14l11-7z"/></svg></button>
-    <button id="next" aria-label="Next track"><svg viewBox="0 0 24 24"><path d="M16 6h2v12h-2zM4 6l10.5 6L4 18z"/></svg></button>
+    <button id="pp" aria-label="Play live"><svg viewBox="0 0 24 24" id="ico"><path d="M8 5v14l11-7z"/></svg></button>
   </div>
   <div class="meta">
-    <b id="title">Choose a station</b>
-    <span id="sub">RAWMIX</span>
-    <div class="prog" id="prog"><div id="fill"></div></div>
+    <b id="title">Indiefferential Radio</b>
+    <span id="sub">Press play to tune in</span>
   </div>
   <label class="vol">Vol <input type="range" id="vol" min="0" max="1" step="0.01" value="0.9" aria-label="Volume"></label>
 </div>
@@ -157,7 +173,7 @@ const CONFIG = {
    "match" = only files whose name contains this text (optional),
    "order" = shuffle | az | za | new  (shuffle is seeded so it is stable per day). */
 const STATIONS = [
-  { name:"Indiefferential Radio", desc:"Indie, left-field and everything between the genres.", sources:["songs"], order:"shuffle" },
+  { name:"Indiefferential Radio", desc:"Indie, left-field and everything between the genres.", sources:["songs","shows","others"], live:true },
   { name:"RAWMIX Main",        desc:"The whole catalogue, shuffled.", sources:["songs","shows","others"], order:"shuffle" },
   { name:"Kvällsprat",         desc:"Shows and podcasts, in the order they were made.", sources:["shows"], order:"az" },
   { name:"Nattskift",          desc:"Late-night songs, played from Z to A.", sources:["songs"], order:"za" },
@@ -229,104 +245,120 @@ async function load(){
   }catch(e){}
 }
 
-/* ---------- stations ---------- */
-function seeded(seed){ let s=seed; return () => (s = Math.imul(s ^ s>>>15, 2246822507)+1013904223 >>> 0) / 4294967296; }
-function build(st){
-  const pool = library.filter(t => st.sources.includes(t.folder));
-  let list = pool.filter(t => !st.match || t.name.toLowerCase().includes(st.match));
-  if (!list.length) list = pool.slice();   // no tagged files yet: play the whole pool
-  const h = [...st.name].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0, 7);
-  const byName = (a,b) => a.name.localeCompare(b.name, undefined, {numeric:true});
-  if (st.order==="az") list.sort(byName);
-  else if (st.order==="za") list.sort((a,b)=>byName(b,a));
-  else if (st.order==="new") list.sort((a,b)=>byName(b,a)); // name your files 2025-… to control this
-  else {
-    const day = Math.floor(Date.now()/864e5), rnd = seeded(day + h);
-    list.sort(byName);
-    for (let i=list.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [list[i],list[j]]=[list[j],list[i]]; }
-  }
-  if (list.length>1) { const k = h % list.length; list = list.slice(k).concat(list.slice(0,k)); }  // each station starts somewhere different
-  return list;
-}
-function drawStations(){
-  $("stlist").innerHTML = "";
-  STATIONS.forEach((st,i) => {
-    const b = document.createElement("button");
-    b.className = "st"; b.setAttribute("role","listitem");
-    b.innerHTML = `<span class="nm">${st.name}<span class="ds">${st.desc}</span></span>`;
-    b.onclick = () => tune(i, true);
-    $("stlist").appendChild(b);
-  });
-}
-function tune(i, play){
-  current = i; idx = 0; wantPlay = play;
-  const st = STATIONS[i];
-  queue = build(st);
-  [...$("stlist").children].forEach((b,k)=> b.setAttribute("aria-current", k===i));
-  $("needle").style.left = `calc(${(i+.5)/STATIONS.length*100}% - 2px)`;
-  $("qtitle").innerHTML = `<span class="live"></span>${st.name}`;
-  drawQueue();
-  if (!queue.length){
-    $("title").textContent = st.name; $("sub").textContent = "Nothing on air yet";
-    au.removeAttribute("src"); return;
-  }
-  load_(idx);
-}
-function drawQueue(){
-  const box = $("tracks");
-  if (!queue.length){
-    const {user} = repoInfo();
-    box.innerHTML = `<p class="empty">No audio found for this station. Upload files to ${STATIONS[current].sources.map(s=>`<code>${CONFIG.folders[s]}/</code>`).join(", ")}${user ? "" : ` and set your GitHub user and repo in <code>CONFIG</code>, or add a <code>playlist.json</code>`}.</p>`;
-    return;
-  }
-  box.innerHTML = "";
-  queue.forEach((t,k) => {
-    const b = document.createElement("button");
-    b.className = "tr"; b.setAttribute("aria-current", k===idx);
-    b.innerHTML = `<small>${k+1}</small><span>${t.title}</span><small>${t.folder}</small>`;
-    b.onclick = () => { idx=k; wantPlay=true; load_(k); };
-    box.appendChild(b);
-  });
-}
-function load_(k){
-  idx = k; const t = queue[k];
-  au.src = t.url;
-  $("title").textContent = t.title;
-  $("sub").textContent = STATIONS[current].name;
-  [...$("tracks").children].forEach((b,i)=> b.setAttribute("aria-current", i===k));
-  if ("mediaSession" in navigator) navigator.mediaSession.metadata = new MediaMetadata({title:t.title, artist:STATIONS[current].name, album:"RAWMIX"});
-  if (wantPlay) au.play().catch(()=>{});
-}
-const step = d => { if (!queue.length) return; wantPlay = true; load_((idx + d + queue.length) % queue.length); };
+/* ---------- the radio clock ----------
+   Everyone hears the same thing at the same moment. The station runs on the wall clock:
+   a random order is drawn for each cycle, and "now" decides which track is on and how far in. */
+const EPOCH = Date.UTC(2026,0,1);
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+const hash = str => [...str].reduce((a,c)=>(a*31+c.charCodeAt(0))>>>0, 7);
+function seeded(seed){ let s=seed>>>0; return () => (s = Math.imul(s ^ s>>>15, 2246822507)+1013904223 >>> 0) / 4294967296; }
 
-/* ---------- controls ---------- */
-const PLAY = "M8 5v14l11-7z", PAUSE = "M6 5h4v14H6zM14 5h4v14h-4z";
-function toggle(){
-  if (current<0) return tune(0,true);
-  au.paused ? au.play().catch(()=>{}) : au.pause();
+const LIVE = STATIONS.find(s => s.live);
+let tracks = [], durs = new Map(), total = 0, ready = null, live = false, seekTo = 0;
+
+const readCache = u => { try{ return +localStorage.getItem("rm_dur:"+u) || 0 }catch(e){ return 0 } };
+const saveCache = (u,d) => { try{ localStorage.setItem("rm_dur:"+u, d) }catch(e){} };
+function probe(u){
+  return new Promise(res => {
+    const a = new Audio(); a.preload = "metadata";
+    const done = d => { a.onloadedmetadata = a.onerror = null; res(d); };
+    a.onloadedmetadata = () => done(isFinite(a.duration) ? a.duration : 0);
+    a.onerror = () => done(0);
+    setTimeout(() => done(0), 10000);
+    a.src = u;
+  });
+}
+function prepare(){
+  tracks = library.filter(t => LIVE.sources.includes(t.folder))
+                  .sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true}));
+  const q = tracks.slice();
+  return Promise.all(Array.from({length:6}, async () => {
+    while (q.length){
+      const t = q.shift(); let d = readCache(t.url);
+      if (!d){ d = await probe(t.url); if (d) saveCache(t.url, d); }
+      if (d > 1) durs.set(t.url, d);
+    }
+  })).then(() => { tracks = tracks.filter(t => durs.has(t.url)); retotal(); });
+}
+const retotal = () => total = tracks.reduce((s,t) => s + durs.get(t.url), 0);
+
+function onNow(){
+  const t = (Date.now() - EPOCH) / 1000;
+  const cycle = Math.floor(t / total);
+  let pos = t - cycle * total;
+  const order = tracks.slice(), rnd = seeded(cycle + hash(LIVE.name));
+  for (let i=order.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); [order[i],order[j]]=[order[j],order[i]]; }
+  for (const tr of order){ const d = durs.get(tr.url); if (pos < d) return {tr, offset:pos}; pos -= d; }
+  return {tr:order[0], offset:0};
+}
+function tuneIn(){
+  const {tr, offset} = onNow();
+  live = true; seekTo = offset;
+  au.muted = offset > 1;                 // stay quiet until we've jumped to the live point
+  au.src = tr.url;
+  au.play().catch(()=>{});
+}
+au.onloadedmetadata = () => {
+  if (!live) return;
+  if (seekTo > 1) au.currentTime = Math.min(seekTo, au.duration - 1);
+  else au.muted = false;
+};
+au.onseeked = () => { au.muted = false; };
+au.onended = () => { if (live) tuneIn(); };           // next song, chosen by the clock
+au.onerror = () => {
+  if (!live) return;
+  const bad = tracks.find(t => au.src.endsWith(t.url) || decodeURIComponent(au.src).endsWith(decodeURIComponent(t.url)));
+  if (bad){ tracks = tracks.filter(t => t !== bad); durs.delete(bad.url); retotal(); }
+  tracks.length ? setTimeout(tuneIn, 500) : setStatus("Off air. Try again soon.");
+};
+au.onplay = au.onpause = () => {
+  const on = !au.paused && live;
+  $("ico").innerHTML = `<path d="${on ? "M6 5h4v14H6zM14 5h4v14h-4z" : "M8 5v14l11-7z"}"/>`;
+  $("pp").setAttribute("aria-label", on ? "Stop listening" : "Play live");
+  document.body.classList.toggle("playing", on);
+  if (live || au.paused) setStatus(on ? "Live now." : "Press play to rejoin the broadcast.");
+};
+function setStatus(t){ $("status").textContent = t; $("sub").textContent = t; }
+
+async function toggle(){
+  if (live && !au.paused){ live = false; au.pause(); return; }   // radio keeps going without you
+  if (!ready){ setStatus("Tuning in…"); au.src = SILENT; au.play().catch(()=>{}); ready = prepare(); }
+  else if (!total) setStatus("Tuning in…");
+  await ready;
+  if (!tracks.length){ setStatus("Nothing on air yet. Upload audio to songs/, shows/ or others/."); return; }
+  tuneIn();
 }
 $("pp").onclick = toggle;
-$("next").onclick = () => step(1);
-$("prev").onclick = () => au.currentTime>4 ? (au.currentTime=0) : step(-1);
-au.onended = () => step(1);                       // loops the whole station forever
-au.onerror = () => { if (queue.length>1) setTimeout(()=>step(1), 800); };
-au.onplay = au.onpause = () => {
-  $("ico").innerHTML = `<path d="${au.paused?PLAY:PAUSE}"/>`;
-  $("pp").setAttribute("aria-label", au.paused?"Play":"Pause");
-  document.body.classList.toggle("playing", !au.paused);
-};
-au.ontimeupdate = () => { if (au.duration) $("fill").style.width = (au.currentTime/au.duration*100)+"%"; };
-$("prog").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); if (au.duration) au.currentTime = (e.clientX-r.left)/r.width*au.duration; };
 $("vol").oninput = e => au.volume = e.target.value;
 au.volume = .9;
 document.addEventListener("keydown", e => { if (e.code==="Space" && !/INPUT|BUTTON/.test(e.target.tagName)){ e.preventDefault(); toggle(); } });
 if ("mediaSession" in navigator){
-  navigator.mediaSession.setActionHandler("nexttrack", ()=>step(1));
-  navigator.mediaSession.setActionHandler("previoustrack", ()=>step(-1));
+  navigator.mediaSession.metadata = new MediaMetadata({title:LIVE.name, artist:"RAWMIX", album:"Live"});
+  ["nexttrack","previoustrack","seekto","seekforward","seekbackward"].forEach(a => { try{ navigator.mediaSession.setActionHandler(a, null) }catch(e){} });
+}
+
+/* ---------- stations list ---------- */
+function drawStations(){
+  $("stlist").innerHTML = "";
+  STATIONS.forEach(st => {
+    const b = document.createElement("button");
+    b.className = "st"; b.setAttribute("role","listitem");
+    if (st.live){
+      b.innerHTML = `<span class="nm">${st.name}<span class="ds">${st.desc}</span></span>`;
+      b.setAttribute("aria-current","true");
+      b.onclick = toggle;
+    } else {
+      b.disabled = true;
+      b.innerHTML = `<span class="nm">${st.name}<span class="ds ld">Radio Loading</span></span>`;
+    }
+    $("stlist").appendChild(b);
+  });
+  $("needle").style.left = `calc(${(STATIONS.indexOf(LIVE)+.5)/STATIONS.length*100}% - 2px)`;
+  $("qdesc").textContent = LIVE.desc;
 }
 
 /* ---------- go ---------- */
-(async () => { await load(); drawStations(); tune(0,false); })();
+(async () => { await load(); drawStations(); })();
 </script>
 </body>
 </html>
